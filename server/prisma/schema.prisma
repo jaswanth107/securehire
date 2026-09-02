@@ -1,0 +1,117 @@
+// SecureHire — data model.
+// Authorization boundaries live in the relations below:
+//   JobRequisition.recruiterId          -> recruiter tenancy boundary
+//   CandidatePanelistAssignment         -> panelist visibility boundary (source of truth)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  RECRUITER
+  PANELIST
+}
+
+enum RequisitionStatus {
+  OPEN
+  ON_HOLD
+  CLOSED
+}
+
+enum CandidateStatus {
+  APPLIED
+  SCREENING
+  INTERVIEWING
+  OFFER
+  HIRED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  requisitions       JobRequisition[]             @relation("RecruiterRequisitions")
+  panelAssignments   CandidatePanelistAssignment[]
+  feedbackSubmitted  InterviewFeedback[]
+
+  @@index([role])
+}
+
+model JobRequisition {
+  id          String            @id @default(uuid())
+  title       String
+  department  String
+  description String
+  status      RequisitionStatus @default(OPEN)
+  recruiterId String
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  recruiter  User        @relation("RecruiterRequisitions", fields: [recruiterId], references: [id], onDelete: Cascade)
+  candidates Candidate[]
+
+  @@index([recruiterId])
+}
+
+model Candidate {
+  id            String          @id @default(uuid())
+  name          String
+  email         String
+  phone         String
+  status        CandidateStatus @default(APPLIED)
+  notes         String?
+  requisitionId String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  requisition JobRequisition                @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  assignments CandidatePanelistAssignment[]
+  feedback    InterviewFeedback[]
+
+  @@index([requisitionId])
+}
+
+// The single source of truth for panelist visibility.
+model CandidatePanelistAssignment {
+  id          String   @id @default(uuid())
+  candidateId String
+  panelistId  String
+  assignedAt  DateTime @default(now())
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  panelist  User      @relation(fields: [panelistId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, panelistId])
+  @@index([panelistId])
+  @@index([candidateId])
+}
+
+model InterviewFeedback {
+  id          String   @id @default(uuid())
+  candidateId String
+  panelistId  String
+  rating      Int
+  feedback    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  panelist  User      @relation(fields: [panelistId], references: [id], onDelete: Cascade)
+
+  @@unique([candidateId, panelistId])
+  @@index([candidateId])
+  @@index([panelistId])
+}

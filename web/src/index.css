@@ -1,0 +1,149 @@
+@import 'tailwindcss';
+
+/*
+  SecureHire design tokens.
+
+  Every colour is a semantic token rather than a raw palette step, so the dark
+  theme below only has to redefine the variables — no `dark:` variant is needed
+  on individual components, and the two themes cannot drift apart.
+*/
+@theme {
+  --color-canvas: #f5f6fb;
+  --color-surface: #ffffff;
+  --color-subtle: #f8fafc;
+  --color-border: #e3e6ef;
+  --color-border-strong: #cdd3e2;
+  --color-ink: #101426;
+  --color-muted: #626b85;
+  --color-faint: #8b93a9;
+
+  --color-brand: #4f46e5;
+  --color-brand-hover: #4338ca;
+  --color-brand-soft: #ecebff;
+  --color-brand-ink: #3730a3;
+
+  --color-success: #0f9d6e;
+  --color-success-soft: #dcf5ec;
+  --color-warn: #b45309;
+  --color-warn-soft: #fdf0dc;
+  --color-danger: #d4344b;
+  --color-danger-soft: #fdE7ea;
+  --color-info: #0f7bbd;
+  --color-info-soft: #e0f1fb;
+
+  --color-role-admin: #7c3aed;
+  --color-role-admin-soft: #f2ecff;
+  --color-role-recruiter: #0f7bbd;
+  --color-role-recruiter-soft: #e0f1fb;
+  --color-role-panelist: #0d9488;
+  --color-role-panelist-soft: #d9f4f0;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-card: 14px;
+
+  --shadow-card: 0 1px 2px rgb(16 20 38 / 0.04), 0 8px 24px -12px rgb(16 20 38 / 0.12);
+  --shadow-pop: 0 12px 40px -12px rgb(16 20 38 / 0.28);
+}
+
+[data-theme='dark'] {
+  --color-canvas: #0b0f1c;
+  --color-surface: #131a2b;
+  --color-subtle: #1a2236;
+  --color-border: #26304a;
+  --color-border-strong: #35415f;
+  --color-ink: #eef1f8;
+  --color-muted: #a2abc4;
+  --color-faint: #7c869f;
+
+  --color-brand: #7c76f5;
+  --color-brand-hover: #8f8aff;
+  --color-brand-soft: #232449;
+  --color-brand-ink: #c3c0ff;
+
+  --color-success: #34d399;
+  --color-success-soft: #10352b;
+  --color-warn: #fbbf24;
+  --color-warn-soft: #3a2c11;
+  --color-danger: #fb7185;
+  --color-danger-soft: #3b1620;
+  --color-info: #56b6ee;
+  --color-info-soft: #10293b;
+
+  --color-role-admin: #b39cff;
+  --color-role-admin-soft: #291f45;
+  --color-role-recruiter: #56b6ee;
+  --color-role-recruiter-soft: #10293b;
+  --color-role-panelist: #45c9b8;
+  --color-role-panelist-soft: #0d2f2c;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px -14px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 16px 48px -16px rgb(0 0 0 / 0.75);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  [data-theme='dark'] {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  *:focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Diagonal hatching behind the preview banner: a deliberately "unusual"
+     surface so an impersonated session never looks like a normal one. */
+  .preview-hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-warn) 16%, transparent) 0 10px,
+      transparent 10px 20px
+    );
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--color-subtle);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-border) 60%, transparent),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}

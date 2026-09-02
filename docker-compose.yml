@@ -1,0 +1,22 @@
+# Postgres for local development and for the authorization test suite.
+# The test suite uses a separate database on the same instance.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: securehire-db
+    environment:
+      POSTGRES_USER: securehire
+      POSTGRES_PASSWORD: securehire_dev_pw
+      POSTGRES_DB: securehire
+    ports:
+      - '5434:5432'
+    volumes:
+      - securehire-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U securehire']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  securehire-data:
