@@ -1,0 +1,49 @@
+# Render Blueprint — provisions the Postgres database and the API together.
+#
+# Deploy with: Render Dashboard → New → Blueprint → pick this repo.
+# Everything here is free-tier. Two values are deliberately NOT set:
+#   JWT_SECRET  — Render generates a strong random one on first deploy.
+#   CORS_ORIGIN — set it in the dashboard once the Vercel URL exists.
+
+databases:
+  - name: securehire-db
+    databaseName: securehire
+    user: securehire
+    plan: free
+
+services:
+  - type: web
+    name: securehire-api
+    runtime: node
+    plan: free
+    rootDir: server
+    # --include=dev is required: NODE_ENV=production below applies to the build
+    # too, and tsc/prisma live in devDependencies. Without it the build fails
+    # with "tsc: not found".
+    #
+    # Migrations run at build time so a failed migration fails the deploy
+    # instead of taking down a running instance.
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build && npx prisma migrate deploy
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: securehire-db
+          property: connectionString
+      # Generated once by Render and never shown in the repo. Rotating it
+      # invalidates every issued session, which is the intended behaviour.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 2h
+      # The cookie is issued over HTTPS in production, so it must be Secure.
+      - key: COOKIE_SECURE
+        value: "true"
+      # Set to your Vercel URL in the dashboard, e.g. https://securehire.vercel.app
+      - key: CORS_ORIGIN
+        sync: false

@@ -258,6 +258,47 @@ script exits non-zero if any mutation goes undetected.
 
 ---
 
+## Deployment (Render + Vercel)
+
+The backend runs on Render, the static frontend on Vercel. `render.yaml` and
+`web/vercel.json` in this repo hold the configuration.
+
+**The frontend calls `/api` as a relative path with `credentials: 'include'`.**
+That single fact drives the whole setup: rather than pointing the browser at the
+Render host, Vercel *rewrites* `/api/*` through to Render. The browser therefore
+only ever talks to one origin, so the session cookie stays first-party and
+`SameSite=Lax` — the same model the local Vite proxy provides, and the one the
+test suite exercises. Nothing has to be relaxed to `SameSite=None`, and no
+frontend code changes between local and production.
+
+```
+browser → securehire.vercel.app ──/api/*──▶ securehire-api.onrender.com
+             (one origin, first-party cookie)
+```
+
+### Order matters
+
+1. **Render first** — deploy the Blueprint (`render.yaml`); it provisions the
+   free Postgres instance and the API, generates `JWT_SECRET`, and runs
+   `prisma migrate deploy` during the build. Note the resulting service URL.
+2. **Point Vercel at it** — replace the host in `web/vercel.json` with that URL.
+3. **Vercel** — import the repo with **Root Directory `web`**, then set
+   `CORS_ORIGIN` on Render to the Vercel URL and redeploy.
+
+### Notes
+
+- The Render build uses `npm ci --include=dev`: `NODE_ENV=production` applies to
+  the build too, and `tsc`/`prisma` are devDependencies. Without the flag the
+  build fails with `tsc: not found`.
+- Seed the deployed database from your machine, using the *external* connection
+  string from the Render dashboard:
+  `DATABASE_URL="<external-url>" npm run seed`
+- Free Render services sleep after ~15 minutes idle, so the first request after
+  a pause takes roughly 50 seconds. Free Postgres instances expire after 30 days.
+- `COOKIE_SECURE=true` is required in production and is set in the Blueprint.
+
+---
+
 ## Known limitations
 
 - `npm test` runs against a live Postgres database and re-seeds per file, so the suite is
