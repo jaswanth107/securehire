@@ -50,6 +50,8 @@ services:
       # The cookie is issued over HTTPS in production, so it must be Secure.
       - key: COOKIE_SECURE
         value: "true"
-      # Set to your Vercel URL in the dashboard, e.g. https://securehire.vercel.app
+      # The deployed frontend. Not a secret, and declaring it here means a
+      # Blueprint sync applies it — no dashboard step to forget. Add further
+      # origins comma-separated.
       - key: CORS_ORIGIN
-        sync: false
+        value: https://securehire-iu71.vercel.app
