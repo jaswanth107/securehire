@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { env } from './config/env.js';
 import { apiRouter } from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { forbidden } from './lib/errors.js';
 
 export function createApp() {
   const app = express();
@@ -16,11 +17,21 @@ export function createApp() {
 
   // Credentialed CORS must name its origins explicitly — a wildcard would let
   // any site drive the API with the user's cookie.
+  //
+  // A rejected origin is a deployment mistake far more often than an attack, so
+  // it fails as a 403 naming the offending origin rather than an opaque 500.
+  // The origin is echoed back only to the caller that already sent it, so this
+  // discloses nothing it does not already know.
   app.use(
     cors({
       origin(origin, callback) {
         if (!origin || env.corsOrigin.includes(origin)) return callback(null, true);
-        callback(new Error('Origin not allowed by CORS policy.'));
+        callback(
+          forbidden(
+            `Origin ${origin} is not allowed by this API's CORS policy. ` +
+              'Add it to the CORS_ORIGIN environment variable.',
+          ),
+        );
       },
       credentials: true,
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Preview-As-User'],
