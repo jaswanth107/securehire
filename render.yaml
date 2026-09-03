@@ -1,15 +1,22 @@
-# Render Blueprint — provisions the Postgres database and the API together.
+# Render Blueprint — provisions the API service.
 #
 # Deploy with: Render Dashboard → New → Blueprint → pick this repo.
-# Everything here is free-tier. Two values are deliberately NOT set:
-#   JWT_SECRET  — Render generates a strong random one on first deploy.
-#   CORS_ORIGIN — set it in the dashboard once the Vercel URL exists.
-
-databases:
-  - name: securehire-db
-    databaseName: securehire
-    user: securehire
-    plan: free
+#
+# No database is declared here: Render allows a single free Postgres instance
+# per account. Point DATABASE_URL at a Postgres of your own — a free Neon or
+# Supabase project works, and unlike Render's free tier it does not expire
+# after 30 days.
+#
+# Note that sharing an existing database is NOT a safe option here. The init
+# migration is fully schema-qualified (`CREATE TABLE "public"."User"`), so a
+# `?schema=` parameter in the URL cannot redirect it: the tables land in
+# `public` regardless, alongside whatever already lives there. SecureHire
+# needs its own database.
+#
+# Three values are deliberately NOT set here:
+#   DATABASE_URL — connection string for that Postgres.
+#   JWT_SECRET   — Render generates a strong random one on first deploy.
+#   CORS_ORIGIN  — set it in the dashboard once the Vercel URL exists.
 
 services:
   - type: web
@@ -31,10 +38,9 @@ services:
         value: "22"
       - key: NODE_ENV
         value: production
+      # Connection string for your own Postgres (Neon / Supabase / Render paid)
       - key: DATABASE_URL
-        fromDatabase:
-          name: securehire-db
-          property: connectionString
+        sync: false
       # Generated once by Render and never shown in the repo. Rotating it
       # invalidates every issued session, which is the intended behaviour.
       - key: JWT_SECRET

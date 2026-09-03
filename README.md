@@ -278,11 +278,16 @@ browser → securehire.vercel.app ──/api/*──▶ securehire-api.onrender.
 
 ### Order matters
 
-1. **Render first** — deploy the Blueprint (`render.yaml`); it provisions the
-   free Postgres instance and the API, generates `JWT_SECRET`, and runs
+1. **Database first** — create a free Postgres (Neon or Supabase) and copy its
+   connection string. Render permits only one free Postgres per account, and
+   SecureHire needs a database of its own: the init migration is
+   schema-qualified (`CREATE TABLE "public"."User"`), so a `?schema=` parameter
+   cannot divert it into a corner of an existing database.
+2. **Render** — deploy the Blueprint (`render.yaml`); set `DATABASE_URL` to that
+   connection string. Render generates `JWT_SECRET` and runs
    `prisma migrate deploy` during the build. Note the resulting service URL.
-2. **Point Vercel at it** — replace the host in `web/vercel.json` with that URL.
-3. **Vercel** — import the repo with **Root Directory `web`**, then set
+3. **Point Vercel at it** — replace the host in `web/vercel.json` with that URL.
+4. **Vercel** — import the repo with **Root Directory `web`**, then set
    `CORS_ORIGIN` on Render to the Vercel URL and redeploy.
 
 ### Notes
@@ -294,7 +299,7 @@ browser → securehire.vercel.app ──/api/*──▶ securehire-api.onrender.
   string from the Render dashboard:
   `DATABASE_URL="<external-url>" npm run seed`
 - Free Render services sleep after ~15 minutes idle, so the first request after
-  a pause takes roughly 50 seconds. Free Postgres instances expire after 30 days.
+  a pause takes roughly 50 seconds.
 - `COOKIE_SECURE=true` is required in production and is set in the Blueprint.
 
 ---
