@@ -4,6 +4,7 @@ import { useSession } from '../context/SessionContext';
 import { useTheme } from '../context/ThemeContext';
 import { Avatar, Button, RolePill } from './ui';
 import { PreviewBanner } from './PreviewBanner';
+import { NotificationBell } from './NotificationBell';
 import type { Role } from '../lib/types';
 
 interface NavItem {
@@ -45,6 +46,12 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Requisitions',
     roles: ['ADMIN', 'RECRUITER'],
     icon: icon('M9 4h6a1 1 0 0 1 1 1v2H8V5a1 1 0 0 1 1-1M4 7h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1M3 12h18'),
+  },
+  {
+    to: '/activity',
+    label: 'Activity',
+    roles: ['ADMIN', 'RECRUITER', 'PANELIST'],
+    icon: icon('M3 12h4l2.5-6 4 12L16 12h5'),
   },
   {
     to: '/users',
@@ -265,6 +272,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="ml-auto flex min-w-0 items-center gap-3">
+            <NotificationBell />
             <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border px-2.5 py-1.5">
               <span className="hidden text-[11px] uppercase tracking-wider text-faint sm:inline">
                 {isPreview ? 'Previewing as' : 'Viewing as'}

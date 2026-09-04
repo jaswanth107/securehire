@@ -46,6 +46,7 @@ export function RequisitionsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['requisitions'] });
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity'] });
       setCreating(false);
       notify('Requisition created.');
     },

@@ -42,3 +42,33 @@ export function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
 }
+
+const RELATIVE_UNITS: [limit: number, seconds: number, unit: Intl.RelativeTimeFormatUnit][] = [
+  [60, 1, 'second'],
+  [3600, 60, 'minute'],
+  [86400, 3600, 'hour'],
+  [604800, 86400, 'day'],
+  [2629800, 604800, 'week'],
+  [31557600, 2629800, 'month'],
+];
+
+/** "3 minutes ago" — used by the activity feed, where exact times add noise. */
+export function relativeTime(value: string): string {
+  const elapsed = (Date.now() - new Date(value).getTime()) / 1000;
+  if (elapsed < 45) return 'just now';
+
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  for (const [limit, seconds, unit] of RELATIVE_UNITS) {
+    if (elapsed < limit) return formatter.format(-Math.round(elapsed / seconds), unit);
+  }
+  return formatter.format(-Math.round(elapsed / 31557600), 'year');
+}
+
+export function formatDateTime(value: string): string {
+  return new Date(value).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

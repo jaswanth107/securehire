@@ -57,6 +57,8 @@ export function CandidatesPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['candidates'] });
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
+      // The change just made is an audit entry now, so the feed and badge follow.
+      void queryClient.invalidateQueries({ queryKey: ['activity'] });
       setCreating(false);
       notify('Candidate added.');
     },

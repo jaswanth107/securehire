@@ -49,6 +49,7 @@ export function CandidateDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ['candidate', id] });
     void queryClient.invalidateQueries({ queryKey: ['candidates'] });
     void queryClient.invalidateQueries({ queryKey: ['stats'] });
+    void queryClient.invalidateQueries({ queryKey: ['activity'] });
   };
 
   const updateCandidate = useMutation({

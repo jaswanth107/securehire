@@ -45,6 +45,7 @@ export function RequisitionDetailPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['requisition', id] });
       void queryClient.invalidateQueries({ queryKey: ['requisitions'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity'] });
       notify('Requisition updated.');
     },
     onError: (error) =>

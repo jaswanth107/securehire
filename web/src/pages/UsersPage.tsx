@@ -34,6 +34,7 @@ export function UsersPage() {
       api<User>(`/users/${id}`, { method: 'PATCH', body: { isActive } }),
     onSuccess: (user) => {
       void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ['activity'] });
       notify(`${user.name} ${user.isActive ? 'reactivated' : 'deactivated'}.`);
     },
     onError: (error) =>

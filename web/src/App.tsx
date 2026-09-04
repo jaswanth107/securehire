@@ -7,6 +7,7 @@ import { CandidateDetailPage } from './pages/CandidateDetailPage';
 import { RequisitionsPage } from './pages/RequisitionsPage';
 import { RequisitionDetailPage } from './pages/RequisitionDetailPage';
 import { UsersPage } from './pages/UsersPage';
+import { ActivityPage } from './pages/ActivityPage';
 import { PreviewPage } from './pages/PreviewPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -52,6 +53,14 @@ export default function App() {
         element={
           <ProtectedRoute roles={['ADMIN', 'RECRUITER']}>
             <RequisitionDetailPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/activity"
+        element={
+          <ProtectedRoute>
+            <ActivityPage />
           </ProtectedRoute>
         }
       />
