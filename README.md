@@ -200,13 +200,58 @@ GET    /api/users/panelists      # admin + recruiter (needed to staff a panel)
 PATCH  /api/users/:id            # admin only — activate/deactivate
 GET    /api/preview/users        # authenticated admin only
 GET    /api/stats/dashboard      # counts computed over the caller's scope
+
+GET    /api/activity             # scoped: all / own tenancy / own panel work
+GET    /api/activity/unread      # badge count, over the same scope
+POST   /api/activity/read        # moves the read marker; inert during preview
 ```
+
+---
+
+## Activity log and notifications
+
+Every mutation writes one `ActivityEvent` row, in the same transaction as the change, so
+the log cannot disagree with the data. The header bell reads it; `/activity` is the full
+archive.
+
+Three things make it an audit log rather than a feed:
+
+**The actor is the proven identity.** `recordEvent` reads `req.authenticatedUser`, never
+`req.user`. An admin who creates a candidate while previewing as a recruiter is recorded as
+the admin, with the recruiter kept alongside in `onBehalfOf` — and the UI renders that as
+"Admin John (as Recruiter Alice)". A log that attributed the action to the recruiter would
+be worse than no log.
+
+**Events outlive what they describe.** `ActivityEvent` has no relations — every id is a
+plain column. `Candidate` and `JobRequisition` both cascade on delete, so a foreign key
+would make a deletion erase its own evidence. Names are snapshots taken at write time;
+contact details and feedback text are never copied in, because the log is read by all three
+roles and `serializeCandidate` exists to keep those fields away from panelists.
+
+**It is scoped like every other read.** The feed is the only endpoint that reads across the
+whole system, which makes it the highest-value target in the app:
+
+| Role | Sees |
+|---|---|
+| Admin | Everything |
+| Recruiter | Events tagged with their own `recruiterId` — the requisition owner at the time |
+| Panelist | Only candidates they are *currently* assigned to, narrowed again to their own actions, things done to them, and status changes — with the actor stripped, since panelists have no user directory anywhere in the app |
+
+A burst is collapsed on read, not at write time: adjacent events from the same actor doing
+the same thing in the same requisition become one row the reviewer can expand. A recruiter
+adding twenty candidates is one line reading *"Recruiter Alice added 20 candidates to
+Senior Frontend Engineer"*, not twenty lines burying everything else. Grouping on read
+needs no batch id, so it works for a script hitting the API directly too.
+
+The read marker is one row per user, not a copy of every event per recipient. `POST
+/api/activity/read` is deliberately inert during preview: an admin looking through a
+recruiter's eyes should not clear that recruiter's badge as a side effect of looking.
 
 ---
 
 ## The security test suite
 
-`server/tests/` — 65 tests, all against a real database through the real Express app.
+`server/tests/` — 77 tests, all against a real database through the real Express app.
 
 Every authorization test asserts **two** things: that the request is refused, *and* that
 the protected data is absent from the response body. `expectAbsent()` serializes the whole
@@ -222,6 +267,7 @@ handler that returned `403` while still echoing the record would fail.
 | `authorization/preview-escalation.test.ts` | Non-admins sending `X-Preview-As-User`; admins losing reach while previewing |
 | `authorization/assignments.test.ts` | Assignment as a privilege-granting write; duplicate and concurrent assignment |
 | `authorization/edge-cases.test.ts` | Deactivation, ownership transfer, candidate moved between requisitions, deleted preview target |
+| `authorization/activity-feed.test.ts` | The activity log as a leak: cross-tenant events, panelists reading the panel, cursor probing, preview attribution |
 | `auth/auth.test.ts` | Cookies, forged tokens, inflated role claims, expired tokens, ADMIN self-registration |
 
 ### Leak-detection proof
@@ -236,7 +282,9 @@ script exits non-zero if any mutation goes undetected.
 | Role is checked but resource ownership is not | **13 tests failed** |
 | `X-Preview-As-User` trusted from any authenticated user | **3 tests failed** |
 | Panelist visibility inferred from the requisition instead of the assignment | **6 tests failed** |
-| Secure code restored | **65 passed, 0 failed** |
+| Activity feed returns the whole log to every role | **5 tests failed** |
+| Audit log attributes a previewing admin's action to the previewed user | **1 test failed** |
+| Secure code restored | **77 passed, 0 failed** |
 
 ---
 
