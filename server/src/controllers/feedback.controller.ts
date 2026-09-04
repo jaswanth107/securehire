@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { serializeUser } from '../lib/presenters.js';
 import { authorizeCandidateAccess } from '../services/authorization.service.js';
+import { recordEvent } from '../lib/activity.js';
 
 /** GET /api/candidates/:candidateId/feedback */
 export const listFeedback = asyncHandler(async (req: Request, res: Response) => {
@@ -47,11 +48,30 @@ export const submitFeedback = asyncHandler(async (req: Request, res: Response) =
   const candidate = await authorizeCandidateAccess(user, req.params.candidateId!, 'feedback');
   const { rating, feedback } = req.body as { rating: number; feedback: string };
 
-  const saved = await prisma.interviewFeedback.upsert({
-    where: { candidateId_panelistId: { candidateId: candidate.id, panelistId: user.id } },
-    create: { candidateId: candidate.id, panelistId: user.id, rating, feedback },
-    update: { rating, feedback },
-    include: { panelist: { select: { id: true, name: true, email: true, role: true } } },
+  const saved = await prisma.$transaction(async (tx) => {
+    const row = await tx.interviewFeedback.upsert({
+      where: { candidateId_panelistId: { candidateId: candidate.id, panelistId: user.id } },
+      create: { candidateId: candidate.id, panelistId: user.id, rating, feedback },
+      update: { rating, feedback },
+      include: { panelist: { select: { id: true, name: true, email: true, role: true } } },
+    });
+
+    await recordEvent(tx, req, {
+      action: 'FEEDBACK_SUBMITTED',
+      recruiterId: candidate.requisition.recruiterId,
+      requisitionId: candidate.requisitionId,
+      requisitionTitle: candidate.requisition.title,
+      candidateId: candidate.id,
+      candidateName: candidate.name,
+      targetUserId: row.panelist.id,
+      targetUserName: row.panelist.name,
+      // The rating is a signal a reviewer wants in the feed; the written
+      // feedback is not copied here, so the log cannot become a second, less
+      // guarded, copy of it.
+      detail: { rating: row.rating },
+    });
+
+    return row;
   });
 
   res.status(201).json({

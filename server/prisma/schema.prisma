@@ -43,9 +43,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  requisitions       JobRequisition[]             @relation("RecruiterRequisitions")
-  panelAssignments   CandidatePanelistAssignment[]
-  feedbackSubmitted  InterviewFeedback[]
+  requisitions      JobRequisition[]              @relation("RecruiterRequisitions")
+  panelAssignments  CandidatePanelistAssignment[]
+  feedbackSubmitted InterviewFeedback[]
 
   @@index([role])
 }
@@ -114,4 +114,81 @@ model InterviewFeedback {
   @@unique([candidateId, panelistId])
   @@index([candidateId])
   @@index([panelistId])
+}
+
+// ---------------------------------------------------------------------------
+// Activity log
+// ---------------------------------------------------------------------------
+
+enum ActivityAction {
+  CANDIDATE_CREATED
+  CANDIDATE_UPDATED
+  CANDIDATE_STATUS_CHANGED
+  CANDIDATE_DELETED
+  PANELIST_ASSIGNED
+  PANELIST_UNASSIGNED
+  FEEDBACK_SUBMITTED
+  REQUISITION_CREATED
+  REQUISITION_UPDATED
+  REQUISITION_STATUS_CHANGED
+  REQUISITION_DELETED
+  USER_ACTIVATED
+  USER_DEACTIVATED
+}
+
+// Append-only record of every mutation the API performs.
+//
+// Two deliberate choices here:
+//
+//  1. No relations. Every id is a plain column, so deleting a candidate or a
+//     requisition does NOT cascade away the evidence that it existed — a DELETE
+//     must stay the most visible entry in the log, not the one that erases
+//     itself.
+//
+//  2. Names are snapshots taken at write time, and the only denormalized
+//     content stored. Contact details and feedback text are never copied here:
+//     the feed is read by all three roles, and `serializeCandidate` exists
+//     precisely to keep those fields away from panelists.
+//
+// `recruiterId` is the tenancy key — the owner of the affected requisition at
+// the time of the event — so recruiter scoping is one indexed column and needs
+// no join through a row that may since have been deleted.
+model ActivityEvent {
+  id     String         @id @default(uuid())
+  action ActivityAction
+
+  /// The identity proven by the token — never the previewed one.
+  actorId        String
+  actorName      String
+  /// Set only when an admin acted while previewing as someone else.
+  onBehalfOfId   String?
+  onBehalfOfName String?
+
+  recruiterId      String?
+  requisitionId    String?
+  requisitionTitle String?
+  candidateId      String?
+  candidateName    String?
+  targetUserId     String?
+  targetUserName   String?
+
+  /// Small structured extras (a status transition, a rating). Never free text.
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([recruiterId, createdAt])
+  @@index([candidateId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+// Per-viewer read marker for the notification badge.
+//
+// One row per user rather than a copy of every event per recipient: a recruiter
+// adding twenty candidates writes twenty audit rows, not twenty times the
+// number of people who might look at them.
+model NotificationState {
+  userId     String   @id
+  lastReadAt DateTime
+  updatedAt  DateTime @updatedAt
 }

@@ -51,6 +51,29 @@ const MUTATIONS = [
     replace: `      const assigned = true;
       if (!assigned) throw forbidden();`,
   },
+  {
+    name: 'Bug 5 — activity feed returns the whole log to every role',
+    file: 'src/services/authorization.service.ts',
+    find: `    case 'RECRUITER':
+      return { recruiterId: user.id };
+
+    case 'PANELIST': {
+      const assignments = await prisma.candidatePanelistAssignment.findMany({`,
+    replace: `    case 'RECRUITER':
+      return {};
+
+    case 'PANELIST': {
+      if (user) return {};
+      const assignments = await prisma.candidatePanelistAssignment.findMany({`,
+  },
+  {
+    name: 'Bug 6 — audit log attributes a previewing admin\'s action to the previewed user',
+    file: 'src/lib/activity.ts',
+    find: `    actorId: authenticated.id,
+    actorName: authenticated.name,`,
+    replace: `    actorId: effective.id,
+    actorName: effective.name,`,
+  },
 ];
 
 function runSuite() {

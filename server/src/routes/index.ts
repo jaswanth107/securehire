@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { activityRouter } from './activity.routes.js';
 import { authRouter } from './auth.routes.js';
 import { candidatesRouter } from './candidates.routes.js';
 import { requisitionsRouter } from './requisitions.routes.js';
@@ -17,4 +18,5 @@ apiRouter.use('/users', usersRouter);
 apiRouter.use('/requisitions', requisitionsRouter);
 apiRouter.use('/candidates', candidatesRouter);
 apiRouter.use('/preview', previewRouter);
+apiRouter.use('/activity', activityRouter);
 apiRouter.get('/stats/dashboard', authenticateUser, dashboardStats);

@@ -4,6 +4,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { serializeUser } from '../lib/presenters.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import { isAdmin } from '../services/authorization.service.js';
+import { recordEvent } from '../lib/activity.js';
 
 /** GET /api/users — admin only. Full directory including roles and status. */
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
@@ -47,7 +48,18 @@ export const updateUser = asyncHandler(async (req: Request, res: Response) => {
   if (!target) throw notFound('User not found.');
   if (target.id === actor.id) throw badRequest('You cannot change your own account status.');
 
-  const updated = await prisma.user.update({ where: { id: targetId }, data: { isActive } });
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.user.update({ where: { id: targetId }, data: { isActive } });
+    // No recruiterId: account changes are admin-scope only and never surface in
+    // a recruiter's or panelist's feed.
+    await recordEvent(tx, req, {
+      action: isActive ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
+      targetUserId: row.id,
+      targetUserName: row.name,
+      detail: { role: row.role },
+    });
+    return row;
+  });
   res.json({ success: true, data: serializeUser(updated) });
 });
 

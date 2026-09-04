@@ -4,6 +4,7 @@ import { asyncHandler } from '../lib/asyncHandler.js';
 import { serializeUser } from '../lib/presenters.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { authorizeCandidateAccess } from '../services/authorization.service.js';
+import { recordEvent } from '../lib/activity.js';
 
 /**
  * GET /api/candidates/:candidateId/panelists
@@ -49,8 +50,23 @@ export const assignPanelist = asyncHandler(async (req: Request, res: Response) =
   }
 
   try {
-    const assignment = await prisma.candidatePanelistAssignment.create({
-      data: { candidateId: candidate.id, panelistId: panelist.id },
+    const assignment = await prisma.$transaction(async (tx) => {
+      const created = await tx.candidatePanelistAssignment.create({
+        data: { candidateId: candidate.id, panelistId: panelist.id },
+      });
+
+      await recordEvent(tx, req, {
+        action: 'PANELIST_ASSIGNED',
+        recruiterId: candidate.requisition.recruiterId,
+        requisitionId: candidate.requisitionId,
+        requisitionTitle: candidate.requisition.title,
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        targetUserId: panelist.id,
+        targetUserName: panelist.name,
+      });
+
+      return created;
     });
     res.status(201).json({
       success: true,
@@ -72,10 +88,30 @@ export const removePanelist = asyncHandler(async (req: Request, res: Response) =
   const candidate = await authorizeCandidateAccess(user, req.params.candidateId!, 'assign');
   const panelistId = req.params.panelistId!;
 
-  const result = await prisma.candidatePanelistAssignment.deleteMany({
-    where: { candidateId: candidate.id, panelistId },
+  const removed = await prisma.candidatePanelistAssignment.findUnique({
+    where: { candidateId_panelistId: { candidateId: candidate.id, panelistId } },
+    include: { panelist: { select: { id: true, name: true } } },
   });
-  if (result.count === 0) throw notFound('That panelist is not assigned to this candidate.');
+  if (!removed) throw notFound('That panelist is not assigned to this candidate.');
+
+  await prisma.$transaction(async (tx) => {
+    // deleteMany keeps this idempotent under a concurrent duplicate request.
+    const result = await tx.candidatePanelistAssignment.deleteMany({
+      where: { candidateId: candidate.id, panelistId },
+    });
+    if (result.count === 0) throw notFound('That panelist is not assigned to this candidate.');
+
+    await recordEvent(tx, req, {
+      action: 'PANELIST_UNASSIGNED',
+      recruiterId: candidate.requisition.recruiterId,
+      requisitionId: candidate.requisitionId,
+      requisitionTitle: candidate.requisition.title,
+      candidateId: candidate.id,
+      candidateName: candidate.name,
+      targetUserId: removed.panelist.id,
+      targetUserName: removed.panelist.name,
+    });
+  });
 
   res.json({ success: true, data: { candidateId: candidate.id, panelistId } });
 });

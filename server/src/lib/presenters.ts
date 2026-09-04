@@ -1,4 +1,4 @@
-import type { Candidate, JobRequisition, User } from '@prisma/client';
+import type { ActivityEvent, Candidate, JobRequisition, User } from '@prisma/client';
 import type { RequestUser } from '../types/express.js';
 
 /** Password hashes never leave the service layer. */
@@ -53,3 +53,57 @@ export function serializeCandidate(candidate: CandidateWithRequisition, viewer: 
     },
   };
 }
+
+/**
+ * Activity event payload shaped to the viewer.
+ *
+ * The feed is the one endpoint that reads across the whole system, so it gets
+ * the same treatment as `serializeCandidate`: a panelist receives the fact that
+ * something happened to a candidate they are interviewing, and nothing about
+ * who runs the pipeline. They have no user directory anywhere in the app, so
+ * naming the recruiter here would be a disclosure no other endpoint makes.
+ *
+ * Recruiters *do* see the actor, including an admin who acted inside their
+ * tenancy while previewing as them. Hiding that would defeat the point of
+ * keeping the log.
+ */
+export function serializeActivityEvent(event: ActivityEvent, viewer: RequestUser) {
+  const base = {
+    id: event.id,
+    action: event.action,
+    createdAt: event.createdAt,
+    candidateId: event.candidateId,
+    candidateName: event.candidateName,
+    requisitionTitle: event.requisitionTitle,
+    detail: event.detail,
+  };
+
+  if (viewer.role === 'PANELIST') {
+    const isOwnAction = event.actorId === viewer.id;
+    return {
+      ...base,
+      // Their own entries stay attributed; everything else is deliberately
+      // anonymous ("Candidate moved to Offer").
+      actor: isOwnAction ? { id: event.actorId, name: event.actorName } : null,
+      targetUser:
+        event.targetUserId === viewer.id
+          ? { id: event.targetUserId, name: event.targetUserName }
+          : null,
+    };
+  }
+
+  return {
+    ...base,
+    actor: { id: event.actorId, name: event.actorName },
+    onBehalfOf: event.onBehalfOfId
+      ? { id: event.onBehalfOfId, name: event.onBehalfOfName }
+      : null,
+    requisitionId: event.requisitionId,
+    recruiterId: event.recruiterId,
+    targetUser: event.targetUserId
+      ? { id: event.targetUserId, name: event.targetUserName }
+      : null,
+  };
+}
+
+export type SerializedActivityEvent = ReturnType<typeof serializeActivityEvent>;

@@ -103,3 +103,29 @@ export const listCandidatesQuerySchema = z.object({
   status: candidateStatusEnum.optional(),
   search: z.string().max(120).trim().optional(),
 });
+
+export const activityActionEnum = z.enum([
+  'CANDIDATE_CREATED',
+  'CANDIDATE_UPDATED',
+  'CANDIDATE_STATUS_CHANGED',
+  'CANDIDATE_DELETED',
+  'PANELIST_ASSIGNED',
+  'PANELIST_UNASSIGNED',
+  'FEEDBACK_SUBMITTED',
+  'REQUISITION_CREATED',
+  'REQUISITION_UPDATED',
+  'REQUISITION_STATUS_CHANGED',
+  'REQUISITION_DELETED',
+  'USER_ACTIVATED',
+  'USER_DEACTIVATED',
+]);
+
+export const listActivityQuerySchema = z.object({
+  /** Capped so a caller cannot ask the server to page the whole log at once. */
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  cursor: z.string().uuid().optional(),
+  action: activityActionEnum.optional(),
+  actorId: z.string().uuid().optional(),
+  candidateId: z.string().uuid().optional(),
+  requisitionId: z.string().uuid().optional(),
+});

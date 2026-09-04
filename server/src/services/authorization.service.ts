@@ -1,4 +1,4 @@
-import type { Prisma, Role } from '@prisma/client';
+import type { ActivityAction, Prisma, Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { forbidden, notFound } from '../lib/errors.js';
 import type { RequestUser } from '../types/express.js';
@@ -200,4 +200,80 @@ export async function authorizeRequisitionTarget(
   if (user.role !== 'RECRUITER') throw forbidden();
   const owns = await verifyRecruiterOwnership(user.id, requisitionId);
   if (!owns) throw forbidden();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Activity feed scope.                                                        */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The actions a panelist may ever see in the feed.
+ *
+ * The feed is a read surface over *every* mutation in the system, so it is the
+ * one place where a missing filter leaks the whole application at once. This
+ * allow-list is deliberately positive: a new ActivityAction is invisible to
+ * panelists until somebody adds it here on purpose.
+ */
+export const PANELIST_VISIBLE_ACTIONS: ActivityAction[] = [
+  'PANELIST_ASSIGNED',
+  'PANELIST_UNASSIGNED',
+  'FEEDBACK_SUBMITTED',
+  'CANDIDATE_STATUS_CHANGED',
+];
+
+/**
+ * The `where` clause that reduces the activity log to what this user may read.
+ *
+ * Unlike the other scope helpers this one is async: a panelist's visibility is
+ * defined by the assignment table, and the event rows hold no relation to join
+ * through (by design — see the schema).
+ *
+ *   ADMIN     — everything.
+ *   RECRUITER — events tagged with their own tenancy.
+ *   PANELIST  — only events on candidates they are *currently* assigned to,
+ *               narrowed again to their own actions and things done to them.
+ *               A panelist must not learn who else sits on a panel, or that
+ *               another panelist has filed feedback, since neither the
+ *               candidate payload nor the feedback endpoint tells them.
+ */
+export async function activityScopeWhere(
+  user: RequestUser,
+): Promise<Prisma.ActivityEventWhereInput> {
+  switch (user.role) {
+    case 'ADMIN':
+      return {};
+
+    case 'RECRUITER':
+      return { recruiterId: user.id };
+
+    case 'PANELIST': {
+      const assignments = await prisma.candidatePanelistAssignment.findMany({
+        where: { panelistId: user.id },
+        select: { candidateId: true },
+      });
+      const candidateIds = assignments.map((a) => a.candidateId);
+      if (candidateIds.length === 0) return { id: '__no_access__' };
+
+      return {
+        AND: [
+          { candidateId: { in: candidateIds } },
+          { action: { in: PANELIST_VISIBLE_ACTIONS } },
+          {
+            OR: [
+              // Pipeline movement on a candidate they are interviewing. The
+              // presenter strips the actor from these — panelists have no user
+              // directory, so naming the recruiter would be a new disclosure.
+              { action: 'CANDIDATE_STATUS_CHANGED' },
+              // Their own actions, and actions taken on them.
+              { actorId: user.id },
+              { targetUserId: user.id },
+            ],
+          },
+        ],
+      };
+    }
+
+    default:
+      return { id: '__no_access__' };
+  }
 }

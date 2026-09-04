@@ -3,6 +3,7 @@ import type { Request, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
 import { serializeUser } from '../lib/presenters.js';
+import { recordEvent, recordEvents, type ActivityInput } from '../lib/activity.js';
 import { badRequest, forbidden, notFound } from '../lib/errors.js';
 import {
   authorizeRequisitionAccess,
@@ -92,15 +93,27 @@ export const createRequisition = asyncHandler(async (req: Request, res: Response
     recruiterId = recruiter.id;
   }
 
-  const requisition = await prisma.jobRequisition.create({
-    data: {
-      title: body.title,
-      department: body.department,
-      description: body.description,
-      status: body.status ?? 'OPEN',
-      recruiterId,
-    },
-    include: REQUISITION_INCLUDE,
+  const requisition = await prisma.$transaction(async (tx) => {
+    const created = await tx.jobRequisition.create({
+      data: {
+        title: body.title,
+        department: body.department,
+        description: body.description,
+        status: body.status ?? 'OPEN',
+        recruiterId,
+      },
+      include: REQUISITION_INCLUDE,
+    });
+
+    await recordEvent(tx, req, {
+      action: 'REQUISITION_CREATED',
+      recruiterId: created.recruiterId,
+      requisitionId: created.id,
+      requisitionTitle: created.title,
+      detail: { status: created.status },
+    });
+
+    return created;
   });
 
   res.status(201).json({ success: true, data: serialize(requisition) });
@@ -130,16 +143,45 @@ export const updateRequisition = asyncHandler(async (req: Request, res: Response
     }
   }
 
-  const requisition = await prisma.jobRequisition.update({
-    where: { id: existing.id },
-    data: {
-      ...(body.title === undefined ? {} : { title: body.title }),
-      ...(body.department === undefined ? {} : { department: body.department }),
-      ...(body.description === undefined ? {} : { description: body.description }),
-      ...(body.status === undefined ? {} : { status: body.status }),
-      ...(body.recruiterId === undefined || !isAdmin(user) ? {} : { recruiterId: body.recruiterId }),
-    },
-    include: REQUISITION_INCLUDE,
+  const requisition = await prisma.$transaction(async (tx) => {
+    const updated = await tx.jobRequisition.update({
+      where: { id: existing.id },
+      data: {
+        ...(body.title === undefined ? {} : { title: body.title }),
+        ...(body.department === undefined ? {} : { department: body.department }),
+        ...(body.description === undefined ? {} : { description: body.description }),
+        ...(body.status === undefined ? {} : { status: body.status }),
+        ...(body.recruiterId === undefined || !isAdmin(user) ? {} : { recruiterId: body.recruiterId }),
+      },
+      include: REQUISITION_INCLUDE,
+    });
+
+    const events: ActivityInput[] = [];
+    const context = {
+      // Tagged with the *new* owner: a reassigned requisition moves into the
+      // receiving recruiter's feed, and the old owner stops seeing it.
+      recruiterId: updated.recruiterId,
+      requisitionId: updated.id,
+      requisitionTitle: updated.title,
+    };
+
+    if (updated.status !== existing.status) {
+      events.push({
+        action: 'REQUISITION_STATUS_CHANGED',
+        ...context,
+        detail: { from: existing.status, to: updated.status },
+      });
+    }
+
+    const changed = (['title', 'department', 'description', 'recruiterId'] as const).filter(
+      (field) => body[field] !== undefined && body[field] !== existing[field],
+    );
+    if (changed.length > 0) {
+      events.push({ action: 'REQUISITION_UPDATED', ...context, detail: { fields: changed } });
+    }
+
+    await recordEvents(tx, req, events);
+    return updated;
   });
 
   res.json({ success: true, data: serialize(requisition) });
@@ -149,6 +191,16 @@ export const updateRequisition = asyncHandler(async (req: Request, res: Response
 export const deleteRequisition = asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
   const requisition = await authorizeRequisitionAccess(user, req.params.id!, 'delete');
-  await prisma.jobRequisition.delete({ where: { id: requisition.id } });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.jobRequisition.delete({ where: { id: requisition.id } });
+    // Survives its own cascade — see the ActivityEvent model.
+    await recordEvent(tx, req, {
+      action: 'REQUISITION_DELETED',
+      recruiterId: requisition.recruiterId,
+      requisitionId: requisition.id,
+      requisitionTitle: requisition.title,
+    });
+  });
   res.json({ success: true, data: { id: requisition.id } });
 });

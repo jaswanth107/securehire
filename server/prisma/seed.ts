@@ -33,7 +33,10 @@ export const SEED_IDS = {
 export async function seed(): Promise<void> {
   const passwordHash = await bcrypt.hash(env.seedPassword, 12);
 
-  // Wipe in dependency order so re-seeding is idempotent.
+  // Wipe in dependency order so re-seeding is idempotent. The activity log has
+  // no relations, so it is cleared explicitly rather than by cascade.
+  await prisma.activityEvent.deleteMany();
+  await prisma.notificationState.deleteMany();
   await prisma.interviewFeedback.deleteMany();
   await prisma.candidatePanelistAssignment.deleteMany();
   await prisma.candidate.deleteMany();
